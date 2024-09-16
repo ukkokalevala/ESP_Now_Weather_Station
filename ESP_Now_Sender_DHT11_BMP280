@@ -1,0 +1,114 @@
+#include <Wire.h>
+#include <esp_now.h>
+#include <WiFi.h>
+#include <Adafruit_BMP280.h>
+#include <DHT.h>
+
+#define DHTPIN 19  // Pin for DHT11
+#define DHTTYPE DHT11
+
+// Initialize the DHT sensor
+DHT dht(DHTPIN, DHTTYPE);
+
+// Initialize the BMP280 sensor
+Adafruit_BMP280 bmp;
+
+// Define structure to send sensor data
+typedef struct struct_message {
+  float temperature;
+  float humidity;
+  float pressure;
+} struct_message;
+
+struct_message sensorData;
+
+// Receiver's MAC address (update with your receiver's MAC address)
+uint8_t receiverMAC[] = {0x34, 0xB4, 0x72, 0x4E, 0xCB, 0x74};
+
+// Function to send data
+void sendData() {
+  // Gather data from the sensors
+  sensorData.temperature = dht.readTemperature(); // Get temperature from DHT11
+  sensorData.humidity = dht.readHumidity();       // Get humidity from DHT11
+  sensorData.pressure = bmp.readPressure() / 100.0F; // Get pressure from BMP280 in hPa
+
+  // Check if reading failed for DHT11
+  if (isnan(sensorData.temperature) || isnan(sensorData.humidity)) {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    return;
+  }
+
+  // Print sensor values to Serial Monitor
+  Serial.print("Temperature: ");
+  Serial.println(sensorData.temperature);
+  Serial.print("Humidity: ");
+  Serial.println(sensorData.humidity);
+  Serial.print("Pressure: ");
+  Serial.println(sensorData.pressure);
+
+  // Send data via ESP-NOW
+  esp_err_t result = esp_now_send(receiverMAC, (uint8_t *)&sensorData, sizeof(sensorData));
+
+  // Check if the data was sent successfully
+  if (result == ESP_OK) {
+    Serial.println("Data sent successfully");
+  } else {
+    Serial.println("Error sending the data");
+  }
+}
+
+// ESP-NOW callback when data is sent
+void onSent(const uint8_t *macAddr, esp_now_send_status_t status) {
+  Serial.print("Last Packet Send Status: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
+}
+
+void setup() {
+  // Initialize serial monitor
+  Serial.begin(115200);
+
+  // Set the device as a Wi-Fi station
+  WiFi.mode(WIFI_STA);
+
+  // Initialize DHT11
+  dht.begin();
+
+  // Initialize BMP280 with the correct I2C pins
+  Wire.begin(7, 6);  // SDA: 7, SCL: 6
+
+  if (!bmp.begin()) {
+    Serial.println(F("Could not find a valid BMP280 sensor, check wiring!"));
+    while (1);
+  }
+
+  // Print MAC address of the sender
+  Serial.print("Sender MAC address: ");
+  Serial.println(WiFi.macAddress());
+
+  // Initialize ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+
+  // Register the send callback
+  esp_now_register_send_cb(onSent);
+
+  // Add peer (receiver)
+  esp_now_peer_info_t peerInfo;
+  memcpy(peerInfo.peer_addr, receiverMAC, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+
+  // Add the peer to the ESP-NOW network
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Failed to add peer");
+    return;
+  }
+}
+
+void loop() {
+  // Send data every 5 seconds
+  sendData();
+  delay(5000);
+}
