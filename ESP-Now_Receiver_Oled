@@ -1,0 +1,95 @@
+#include <esp_now.h>
+#include <WiFi.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_GFX.h>
+
+// OLED display settings
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    2
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+typedef struct struct_message {
+  float temperature;
+  float humidity;
+  float pressure;
+} struct_message;
+
+// Callback function to be called when data is received
+void onReceiveData(const esp_now_recv_info *recvInfo, const uint8_t *data, int len) {
+  // Print the sender's MAC address
+  char macStr[18];
+  snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", 
+           recvInfo->src_addr[0], recvInfo->src_addr[1], recvInfo->src_addr[2], 
+           recvInfo->src_addr[3], recvInfo->src_addr[4], recvInfo->src_addr[5]);
+  Serial.print("Received data from: ");
+  Serial.println(macStr);
+
+  // Process the received data
+  struct_message receivedData;
+  memcpy(&receivedData, data, sizeof(receivedData));
+
+  // Print the received values to Serial
+  Serial.print("Temperature: ");
+  Serial.println(receivedData.temperature);
+  Serial.print("Humidity: ");
+  Serial.println(receivedData.humidity);
+  Serial.print("Pressure: ");
+  Serial.println(receivedData.pressure);
+
+  // Print data before displaying on OLED
+  Serial.println("Displaying on OLED...");
+
+  // Display data on OLED
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+
+  // Show the received values on the OLED
+  display.print("Temp: ");
+  display.print(receivedData.temperature);
+  display.println(" C");
+
+  display.print("Humidity: ");
+  display.print(receivedData.humidity);
+  display.println(" %");
+
+  display.print("Pressure: ");
+  display.print(receivedData.pressure);
+  display.println(" hPa");
+
+  display.display();  // Refresh OLED display
+  delay(100);  // Short delay to ensure the OLED refreshes
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Set the device as a Wi-Fi station
+  WiFi.mode(WIFI_STA);
+
+  Serial.print("Receiver MAC address: ");
+  Serial.println(WiFi.macAddress());
+   Wire.begin(21, 20);  // Set I2C pins for the OLED
+  // Initialize OLED display
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;);  // Don't proceed, loop forever
+  }
+  display.clearDisplay();
+  display.display();
+
+  // Initialize ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+
+  // Register the receive callback function
+  esp_now_register_recv_cb(onReceiveData);
+}
+
+void loop() {
+  // Nothing needed in the loop for the receiver
+}
