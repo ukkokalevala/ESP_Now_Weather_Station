@@ -23,7 +23,7 @@ typedef struct struct_message {
 struct_message sensorData;
 
 // Receiver's MAC address (update with your receiver's MAC address)
-uint8_t receiverMAC[] = {0x34, 0xB4, 0x72, 0x4E, 0xCB, 0x74};
+uint8_t receiverMAC[] = {0x24, 0x6F, 0x28, 0xAA, 0xBB, 0xCC};
 
 // Function to send data
 void sendData() {
